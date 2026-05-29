@@ -13,77 +13,212 @@ h1{font-size:48px;color:#e8ff00;letter-spacing:4px}
 #search{background:#111;border:1px solid #333;color:#f0f0f0;padding:10px 16px;font-family:monospace;font-size:12px;width:200px;outline:none}
 #search:focus{border-color:#e8ff00}
 #stopAll{background:#ff3c00;color:#fff;border:none;padding:10px 20px;font-family:monospace;font-size:11px;font-weight:700;letter-spacing:2px;cursor:pointer}
-#grid{padding:24px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.card{background:#181818;border:1px solid #222;padding:14px;cursor:pointer;transition:all 0.15s}
+#stopAll:hover{background:#ff6030}
+
+/* Category tabs */
+.cats{padding:16px 24px;display:flex;gap:8px;flex-wrap:wrap;border-bottom:1px solid #222}
+.cat-btn{background:transparent;border:1px solid #333;color:#888;padding:6px 14px;font-family:monospace;font-size:10px;letter-spacing:1px;cursor:pointer;transition:all 0.15s;text-transform:uppercase}
+.cat-btn:hover{border-color:#e8ff00;color:#e8ff00}
+.cat-btn.active{background:#e8ff00;color:#000;border-color:#e8ff00;font-weight:700}
+
+/* Category sections */
+.cat-section{padding:0 24px 32px}
+.cat-title{font-size:10px;letter-spacing:3px;color:#555;text-transform:uppercase;padding:24px 0 12px;border-bottom:1px solid #1a1a1a;margin-bottom:16px}
+.cat-title span{color:#e8ff00}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+
+.card{background:#181818;border:1px solid #222;padding:14px;cursor:pointer;transition:all 0.15s;position:relative}
 .card:hover{background:#222;border-color:#e8ff00;transform:translateY(-2px)}
 .card.playing{background:rgba(232,255,0,0.07);border-color:#e8ff00}
-.card-name{font-size:11px;margin-bottom:10px;min-height:30px;word-break:break-word;line-height:1.4}
+.card-name{font-size:11px;margin-bottom:6px;min-height:28px;word-break:break-word;line-height:1.4}
 .card.playing .card-name{color:#e8ff00}
-.pbtn{background:transparent;border:1px solid #444;color:#888;padding:6px 12px;font-family:monospace;font-size:10px;cursor:pointer;width:100%;letter-spacing:1px}
+.card-dur{font-size:9px;color:#555;margin-bottom:10px;letter-spacing:1px}
+.card.playing .card-dur{color:#888}
+.pbtn{background:transparent;border:1px solid #444;color:#888;padding:6px 12px;font-family:monospace;font-size:10px;cursor:pointer;width:100%;letter-spacing:1px;transition:all 0.15s}
 .card:hover .pbtn{border-color:#e8ff00;color:#e8ff00}
-.card.playing .pbtn{border-color:#e8ff00;color:#e8ff00}
-.loading{grid-column:1/-1;text-align:center;padding:80px;color:#555;letter-spacing:3px}
-footer{text-align:center;padding:24px;color:#555;font-size:10px;letter-spacing:2px;border-top:1px solid #222}
+.card.playing .pbtn{border-color:#e8ff00;color:#e8ff00;background:rgba(232,255,0,0.08)}
+
+/* Spinner */
+.spinner-wrap{grid-column:1/-1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:20px}
+.spinner{width:36px;height:36px;border:3px solid #222;border-top-color:#e8ff00;border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner-text{color:#555;font-size:11px;letter-spacing:3px;text-transform:uppercase}
+
+.no-results{grid-column:1/-1;text-align:center;padding:60px;color:#555;letter-spacing:2px;font-size:11px}
+footer{text-align:center;padding:24px;color:#555;font-size:10px;letter-spacing:2px;border-top:1px solid #222;margin-top:16px}
 </style>
 </head>
 <body>
 <header>
-<h1>YA BELLY!</h1>
-<div class="controls">
-<span id="countBadge" style="color:#555;font-size:11px;letter-spacing:2px"></span>
-<input type="text" id="search" placeholder="Search sounds..." oninput="filterCards()">
-<button id="stopAll" onclick="stopAll()">■ STOP ALL</button>
-</div>
+  <h1>YA BELLY!</h1>
+  <div class="controls">
+    <span id="countBadge" style="color:#555;font-size:11px;letter-spacing:2px"></span>
+    <input type="text" id="search" placeholder="Search sounds..." oninput="filterSounds()">
+    <button id="stopAll" onclick="stopAll()">■ STOP ALL</button>
+  </div>
 </header>
-<div id="grid"><div class="loading">LOADING SOUNDS...</div></div>
-<footer>Ya Belly 58 Soundboard</footer>
+
+<div class="cats" id="catTabs"></div>
+<div id="main"></div>
+<footer>Ya Belly 58 Soundboard — Auto-generated</footer>
+
 <script>
-const REPO='claudeforid-del/Yabelly58';
-const RAW='https://raw.githubusercontent.com/'+REPO+'/main/';
-const API='https://api.github.com/repos/'+REPO+'/contents/';
-let sounds=[],audios={},playing=null;
-async function load(){
-  const r=await fetch(API);
-  const files=await r.json();
-  sounds=files.filter(f=>f.name.toLowerCase().endsWith('.mp3')).map(f=>f.name);
-  document.getElementById('countBadge').textContent=sounds.length+' CLIPS';
-  render(sounds);
-}
-function render(list){
-  const g=document.getElementById('grid');
-  if(!list.length){g.innerHTML='<div class="loading">NO SOUNDS FOUND</div>';return;}
-  g.innerHTML=list.map((n,i)=>`<div class="card" id="card-${i}" onclick="tog('${n}',${i})"><div class="card-name">${n.replace(/\.mp3$/i,'')}</div><button class="pbtn">▶ Play</button></div>`).join('');
-}
-function tog(name,idx){
-  if(audios[name]&&!audios[name].paused){
-    audios[name].pause();audios[name].currentTime=0;
-    document.getElementById('card-'+idx)?.classList.remove('playing');
-    document.querySelector('#card-'+idx+' .pbtn').textContent='▶ Play';
-    playing=null;return;
+const REPO = 'claudeforid-del/Yabelly58';
+const RAW  = 'https://raw.githubusercontent.com/' + REPO + '/main/';
+const API  = 'https://api.github.com/repos/' + REPO + '/contents/';
+
+let sounds = [], audios = {}, playing = null, activeCategory = 'All';
+
+const CATEGORIES = {
+  '58':    s => s.toLowerCase().startsWith('58'),
+  'Ramzi': s => s.toLowerCase().includes('ramzi') || s.toLowerCase().includes('razmi'),
+  'Nuke':  s => s.toLowerCase().includes('nuke'),
+  'Kafe':  s => s.toLowerCase().includes('kafe'),
+  'Other': s => true
+};
+
+function getCategory(name) {
+  for (const [cat, fn] of Object.entries(CATEGORIES)) {
+    if (cat !== 'Other' && fn(name)) return cat;
   }
-  if(playing&&playing!==name)stopCard(playing);
-  if(!audios[name])audios[name]=new Audio(RAW+encodeURIComponent(name));
-  audios[name].play();playing=name;
-  document.getElementById('card-'+idx)?.classList.add('playing');
-  document.querySelector('#card-'+idx+' .pbtn').textContent='■ Stop';
-  audios[name].onended=()=>{
-    document.getElementById('card-'+idx)?.classList.remove('playing');
-    document.querySelector('#card-'+idx+' .pbtn').textContent='▶ Play';
-    playing=null;
+  return 'Other';
+}
+
+function formatDur(secs) {
+  if (!secs || isNaN(secs)) return '';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60).toString().padStart(2, '0');
+  return m + ':' + s;
+}
+
+async function loadDuration(name) {
+  return new Promise(resolve => {
+    const a = new Audio(RAW + encodeURIComponent(name));
+    a.addEventListener('loadedmetadata', () => resolve(a.duration));
+    a.addEventListener('error', () => resolve(null));
+  });
+}
+
+async function load() {
+  document.getElementById('main').innerHTML = `
+    <div class="grid" style="padding:24px">
+      <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <div class="spinner-text">Loading sounds...</div>
+      </div>
+    </div>`;
+
+  const r = await fetch(API);
+  const files = await r.json();
+  sounds = files
+    .filter(f => f.name.toLowerCase().endsWith('.mp3'))
+    .map(f => f.name)
+    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+  document.getElementById('countBadge').textContent = sounds.length + ' CLIPS';
+  buildCatTabs();
+  render(sounds);
+
+  // Load durations in background
+  sounds.forEach(async (name, i) => {
+    const dur = await loadDuration(name);
+    const el = document.getElementById('dur-' + i);
+    if (el && dur) el.textContent = formatDur(dur);
+  });
+}
+
+function buildCatTabs() {
+  const cats = ['All', ...Object.keys(CATEGORIES)];
+  const tabs = document.getElementById('catTabs');
+  tabs.innerHTML = cats.map(c =>
+    `<button class="cat-btn${c === 'All' ? ' active' : ''}" onclick="setCategory('${c}')">${c}</button>`
+  ).join('');
+}
+
+function setCategory(cat) {
+  activeCategory = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent === cat);
+  });
+  filterSounds();
+}
+
+function filterSounds() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let filtered = sounds.filter(s => s.toLowerCase().includes(q));
+  if (activeCategory !== 'All') {
+    filtered = filtered.filter(s => getCategory(s) === activeCategory);
+  }
+  render(filtered);
+}
+
+function render(list) {
+  const main = document.getElementById('main');
+  if (!list.length) {
+    main.innerHTML = '<div class="grid" style="padding:24px"><div class="no-results">NO SOUNDS FOUND</div></div>';
+    return;
+  }
+
+  // Group by category
+  const grouped = {};
+  list.forEach((name, i) => {
+    const cat = activeCategory === 'All' ? getCategory(name) : activeCategory;
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push({ name, globalIdx: sounds.indexOf(name) });
+  });
+
+  const order = activeCategory === 'All' ? Object.keys(CATEGORIES) : [activeCategory];
+  main.innerHTML = order
+    .filter(cat => grouped[cat]?.length)
+    .map(cat => `
+      <div class="cat-section">
+        <div class="cat-title"><span>${cat}</span> — ${grouped[cat].length} clips</div>
+        <div class="grid">
+          ${grouped[cat].map(({ name, globalIdx }) => `
+            <div class="card" id="card-${globalIdx}" onclick="tog('${name.replace(/'/g,"\\'")}',${globalIdx})">
+              <div class="card-name">${name.replace(/\.mp3$/i, '')}</div>
+              <div class="card-dur" id="dur-${globalIdx}">--:--</div>
+              <button class="pbtn">▶ Play</button>
+            </div>`).join('')}
+        </div>
+      </div>`).join('');
+}
+
+function tog(name, idx) {
+  if (audios[name] && !audios[name].paused) {
+    audios[name].pause(); audios[name].currentTime = 0;
+    document.getElementById('card-' + idx)?.classList.remove('playing');
+    const b = document.querySelector('#card-' + idx + ' .pbtn');
+    if (b) b.textContent = '▶ Play';
+    playing = null; return;
+  }
+  if (playing && playing !== name) stopCard(playing);
+  if (!audios[name]) audios[name] = new Audio(RAW + encodeURIComponent(name));
+  audios[name].play(); playing = name;
+  document.getElementById('card-' + idx)?.classList.add('playing');
+  const b = document.querySelector('#card-' + idx + ' .pbtn');
+  if (b) b.textContent = '■ Stop';
+  audios[name].onended = () => {
+    document.getElementById('card-' + idx)?.classList.remove('playing');
+    const b2 = document.querySelector('#card-' + idx + ' .pbtn');
+    if (b2) b2.textContent = '▶ Play';
+    playing = null;
   };
 }
-function stopCard(name){
-  if(audios[name]){audios[name].pause();audios[name].currentTime=0;}
-  const i=sounds.indexOf(name);
-  document.getElementById('card-'+i)?.classList.remove('playing');
-  const b=document.querySelector('#card-'+i+' .pbtn');
-  if(b)b.textContent='▶ Play';
+
+function stopCard(name) {
+  if (audios[name]) { audios[name].pause(); audios[name].currentTime = 0; }
+  const i = sounds.indexOf(name);
+  document.getElementById('card-' + i)?.classList.remove('playing');
+  const b = document.querySelector('#card-' + i + ' .pbtn');
+  if (b) b.textContent = '▶ Play';
 }
-function stopAll(){Object.keys(audios).forEach(n=>stopCard(n));playing=null;}
-function filterCards(){
-  const q=document.getElementById('search').value.toLowerCase();
-  render(sounds.filter(s=>s.toLowerCase().includes(q)));
+
+function stopAll() {
+  Object.keys(audios).forEach(n => stopCard(n));
+  playing = null;
 }
+
 load();
 </script>
 </body>
