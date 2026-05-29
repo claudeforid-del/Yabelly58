@@ -21,18 +21,26 @@ h1{font-size:48px;color:#e8ff00;letter-spacing:4px}
 .cat-section{padding:0 24px 32px}
 .cat-title{font-size:10px;letter-spacing:3px;color:#555;text-transform:uppercase;padding:24px 0 12px;border-bottom:1px solid #1a1a1a;margin-bottom:16px}
 .cat-title span{color:#e8ff00}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.card{background:#181818;border:1px solid #222;padding:14px;cursor:pointer;transition:all 0.15s}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+
+.card{background:#181818;border:1px solid #222;padding:14px;cursor:pointer;transition:border-color 0.15s,background 0.15s;position:relative;overflow:hidden}
 .card:hover{background:#222;border-color:#e8ff00;transform:translateY(-2px)}
 .card.playing{background:rgba(232,255,0,0.07);border-color:#e8ff00}
-.card-name{font-size:11px;margin-bottom:4px;min-height:28px;word-break:break-word;line-height:1.4}
+.card-name{font-size:11px;margin-bottom:4px;word-break:break-word;line-height:1.4}
 .card.playing .card-name{color:#e8ff00}
-.card-dur{font-size:9px;color:#444;margin-bottom:10px;letter-spacing:1px}
-.card-dur.loaded{color:#666}
-.card.playing .card-dur{color:#999}
+
+/* Duration display */
+.card-dur{font-size:9px;color:#555;margin-bottom:10px;letter-spacing:1px;height:12px}
+.card.playing .card-dur{color:#e8ff00}
+
+/* Progress bar */
+.progress-wrap{width:100%;height:2px;background:#2a2a2a;margin-bottom:10px;overflow:hidden}
+.progress-bar{height:100%;width:0%;background:#e8ff00;transition:width 0.25s linear}
+
 .pbtn{background:transparent;border:1px solid #444;color:#888;padding:6px 12px;font-family:monospace;font-size:10px;cursor:pointer;width:100%;letter-spacing:1px;transition:all 0.15s}
 .card:hover .pbtn{border-color:#e8ff00;color:#e8ff00}
 .card.playing .pbtn{border-color:#e8ff00;color:#e8ff00;background:rgba(232,255,0,0.08)}
+
 .spinner-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px;gap:20px}
 .spinner{width:36px;height:36px;border:3px solid #222;border-top-color:#e8ff00;border-radius:50%;animation:spin 0.8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -59,7 +67,7 @@ const REPO = 'claudeforid-del/Yabelly58';
 const RAW  = 'https://raw.githubusercontent.com/' + REPO + '/main/';
 const API  = 'https://api.github.com/repos/' + REPO + '/contents/';
 
-let sounds = [], audios = {}, durations = {}, activePlaying = new Set(), activeCategory = "All";
+let sounds = [], durations = {}, audios = {}, timers = {}, activeCategory = 'All';
 
 const CATEGORIES = {
   '58':    s => s.toLowerCase().startsWith('58'),
@@ -79,24 +87,20 @@ function getCategory(name) {
 function formatDur(secs) {
   if (!secs || isNaN(secs) || !isFinite(secs)) return null;
   const m = Math.floor(secs / 60);
-  const s = Math.floor(secs % 60).toString().padStart(2, '0');
+  const s = Math.floor(secs % 60).toString().padStart(2,'0');
   return m + ':' + s;
 }
 
 function loadDuration(name, idx) {
   const a = new Audio();
   a.preload = 'metadata';
-  a.addEventListener('loadedmetadata', () => {
+  a.onloadedmetadata = () => {
     const dur = formatDur(a.duration);
     if (dur) {
-      durations[name] = dur;
-      // Update all visible duration elements for this sound
-      document.querySelectorAll('.dur-' + idx).forEach(el => {
-        el.textContent = dur;
-        el.classList.add('loaded');
-      });
+      durations[name] = a.duration;
+      document.querySelectorAll('.dur-' + idx).forEach(el => el.textContent = dur);
     }
-  });
+  };
   a.src = RAW + encodeURIComponent(name);
 }
 
@@ -106,26 +110,22 @@ async function load() {
       <div class="spinner"></div>
       <div class="spinner-text">Loading sounds...</div>
     </div>`;
-
   const r = await fetch(API);
   const files = await r.json();
   sounds = files
     .filter(f => f.name.toLowerCase().endsWith('.mp3'))
     .map(f => f.name)
-    .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-
+    .sort((a,b) => a.toLowerCase().localeCompare(b.toLowerCase()));
   document.getElementById('countBadge').textContent = sounds.length + ' CLIPS';
   buildCatTabs();
   render(sounds);
-
-  // Load durations in background after render
   sounds.forEach((name, i) => loadDuration(name, i));
 }
 
 function buildCatTabs() {
   const cats = ['All', ...Object.keys(CATEGORIES)];
   document.getElementById('catTabs').innerHTML = cats.map(c =>
-    `<button class="cat-btn${c === 'All' ? ' active' : ''}" onclick="setCategory('${c}')">${c}</button>`
+    `<button class="cat-btn${c==='All'?' active':''}" onclick="setCategory('${c}')">${c}</button>`
   ).join('');
 }
 
@@ -145,14 +145,12 @@ function filterSounds() {
 function render(list) {
   const main = document.getElementById('main');
   if (!list.length) { main.innerHTML = '<div class="no-results">NO SOUNDS FOUND</div>'; return; }
-
   const grouped = {};
   list.forEach(name => {
     const cat = activeCategory === 'All' ? getCategory(name) : activeCategory;
     if (!grouped[cat]) grouped[cat] = [];
     grouped[cat].push(name);
   });
-
   const order = activeCategory === 'All' ? Object.keys(CATEGORIES) : [activeCategory];
   main.innerHTML = order.filter(cat => grouped[cat]?.length).map(cat => `
     <div class="cat-section">
@@ -160,48 +158,88 @@ function render(list) {
       <div class="grid">
         ${grouped[cat].map(name => {
           const idx = sounds.indexOf(name);
-          const dur = durations[name] || '';
-          return `<div class="card" id="card-${idx}" onclick="tog('${name.replace(/'/g,"\\'")}',${idx})">
+          const dur = durations[name] ? formatDur(durations[name]) : '...';
+          const isPlaying = audios[name] && !audios[name].paused;
+          return `
+          <div class="card${isPlaying?' playing':''}" id="card-${idx}">
             <div class="card-name">${name.replace(/\.mp3$/i,'')}</div>
-            <div class="card-dur dur-${idx}${dur ? ' loaded' : ''}">${dur || '...'}</div>
-            <button class="pbtn">▶ Play</button>
+            <div class="card-dur dur-${idx}">${dur}</div>
+            <div class="progress-wrap"><div class="progress-bar" id="prog-${idx}"></div></div>
+            <button class="pbtn" onclick="tog('${name.replace(/'/g,"\\'")}',${idx})">${isPlaying?'■ Stop':'▶ Play'}</button>
           </div>`;
         }).join('')}
       </div>
     </div>`).join('');
 }
 
+function startProgressTimer(name, idx) {
+  if (timers[name]) clearInterval(timers[name]);
+  timers[name] = setInterval(() => {
+    const audio = audios[name];
+    if (!audio) return clearInterval(timers[name]);
+    const dur = audio.duration;
+    const cur = audio.currentTime;
+    const remaining = dur - cur;
+    const pct = dur ? (cur / dur) * 100 : 0;
+
+    const progEl = document.getElementById('prog-' + idx);
+    const durEl = document.querySelector('.dur-' + idx);
+    if (progEl) progEl.style.width = pct + '%';
+    if (durEl) durEl.textContent = '-' + formatDur(remaining);
+  }, 250);
+}
+
+function stopProgressTimer(name, idx) {
+  clearInterval(timers[name]);
+  delete timers[name];
+  const progEl = document.getElementById('prog-' + idx);
+  const durEl = document.querySelector('.dur-' + idx);
+  if (progEl) progEl.style.width = '0%';
+  if (durEl && durations[name]) durEl.textContent = formatDur(durations[name]);
+}
+
 function tog(name, idx) {
+  // If already playing — stop it
   if (audios[name] && !audios[name].paused) {
-    audios[name].pause(); audios[name].currentTime = 0;
+    audios[name].pause();
+    audios[name].currentTime = 0;
+    stopProgressTimer(name, idx);
     document.getElementById('card-'+idx)?.classList.remove('playing');
     const b = document.querySelector('#card-'+idx+' .pbtn');
     if (b) b.textContent = '▶ Play';
-    activePlaying.delete(name); return;
+    return;
   }
-  
+  // Start playing (multiple allowed)
   if (!audios[name]) audios[name] = new Audio(RAW + encodeURIComponent(name));
-  audios[name].play(); activePlaying.add(name);
+  else { audios[name].currentTime = 0; }
+
+  audios[name].play();
   document.getElementById('card-'+idx)?.classList.add('playing');
   const b = document.querySelector('#card-'+idx+' .pbtn');
   if (b) b.textContent = '■ Stop';
+  startProgressTimer(name, idx);
+
   audios[name].onended = () => {
+    stopProgressTimer(name, idx);
     document.getElementById('card-'+idx)?.classList.remove('playing');
     const b2 = document.querySelector('#card-'+idx+' .pbtn');
     if (b2) b2.textContent = '▶ Play';
-    activePlaying.delete(name);
   };
 }
 
-function stopCard(name) {
-  if (audios[name]) { audios[name].pause(); audios[name].currentTime = 0; }
-  const i = sounds.indexOf(name);
-  document.getElementById('card-'+i)?.classList.remove('playing');
-  const b = document.querySelector('#card-'+i+' .pbtn');
-  if (b) b.textContent = '▶ Play';
+function stopAll() {
+  Object.keys(audios).forEach(name => {
+    const idx = sounds.indexOf(name);
+    if (audios[name] && !audios[name].paused) {
+      audios[name].pause();
+      audios[name].currentTime = 0;
+      stopProgressTimer(name, idx);
+      document.getElementById('card-'+idx)?.classList.remove('playing');
+      const b = document.querySelector('#card-'+idx+' .pbtn');
+      if (b) b.textContent = '▶ Play';
+    }
+  });
 }
-
-function stopAll() { Object.keys(audios).forEach(n => stopCard(n)); activePlaying.clear(); }
 
 load();
 </script>
